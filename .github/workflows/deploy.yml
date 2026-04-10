@@ -1,7 +1,7 @@
 name: Deploy IAM Service to VM
 
 on:
-  workflow_dispatch:  # Ручной запуск через GitHub UI
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -20,12 +20,9 @@ jobs:
           context: .
           load: true
           tags: iam-service:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Save Docker image
-        run: |
-          docker save iam-service:latest | gzip > iam-service.tar.gz
+        run: docker save iam-service:latest | gzip > iam-service.tar.gz
 
       - name: Setup SSH Key
         run: |
@@ -38,68 +35,86 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
         run: |
-          # Копируем образ на VM
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             iam-service.tar.gz $VM_USER@$VM_HOST:/tmp/
 
-          # Деплой на VM
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << 'ENDSSH'
             set -e
 
             echo "🚀 Начало развертывания IAM Service..."
 
-            # Загружаем Docker image
+            # Создаем сеть если нет
+            docker network create shared-network 2>/dev/null || true
+
+            # PostgreSQL для IAM
+            if ! docker ps -a --format '{{.Names}}' | grep -q "^iam-postgres$"; then
+              echo "📦 Создание PostgreSQL для IAM..."
+              docker run -d \
+                --name iam-postgres \
+                --restart unless-stopped \
+                --network shared-network \
+                -e POSTGRES_USER=iam_user \
+                -e POSTGRES_PASSWORD=iam_password \
+                -e POSTGRES_DB=iam_db \
+                -v iam_postgres_data:/var/lib/postgresql/data \
+                postgres:15-alpine
+            else
+              echo "✅ PostgreSQL уже существует"
+            fi
+
+            # Redis для IAM
+            if ! docker ps -a --format '{{.Names}}' | grep -q "^iam-redis$"; then
+              echo "📦 Создание Redis для IAM..."
+              docker run -d \
+                --name iam-redis \
+                --restart unless-stopped \
+                --network shared-network \
+                redis:7-alpine
+            else
+              echo "✅ Redis уже существует"
+            fi
+
+            # Загружаем образ
             echo "📦 Загрузка Docker образа..."
             docker load -i /tmp/iam-service.tar.gz
 
-            # Останавливаем и удаляем старый контейнер
+            # Останавливаем старый контейнер
             echo "🛑 Остановка старого контейнера..."
             docker stop iam-service 2>/dev/null || true
             docker rm iam-service 2>/dev/null || true
 
-            # Запускаем новый контейнер со всеми переменными
+            # Запускаем новый
             echo "▶️  Запуск нового контейнера..."
             docker run -d \
               --name iam-service \
               --restart unless-stopped \
+              --network shared-network \
               -p 3000:3000 \
               -p 50051:50051 \
               -e PORT=50051 \
               -e REST_PROXY_PORT=3000 \
               -e NODE_ENV=production \
-              -e DATABASE_URL="postgresql://postgres:password@localhost:5432/iam" \
-              -e REDIS_HOST=localhost \
+              -e DATABASE_URL="postgresql://iam_user:iam_password@iam-postgres:5432/iam_db" \
+              -e REDIS_HOST=iam-redis \
               -e REDIS_PORT=6379 \
-              -e JWT_SECRET="your-super-secret-jwt-key-change-me" \
-              -e CLINREC_BASE_URL="http://51.250.100.64:8000" \
+              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              -e CLINREC_BASE_URL="http://api:8000" \
               iam-service:latest
 
-            # Очищаем старые images
-            docker image prune -f
+            # Ждем запуска
+            sleep 5
 
-            # Удаляем временный файл
+            # Выполняем миграции
+            echo "🔄 Выполнение миграций Prisma..."
+            docker exec iam-service npx prisma migrate deploy || true
+
+            # Очистка
             rm -f /tmp/iam-service.tar.gz
-
-            # Проверяем статус
-            echo "✅ Проверка статуса контейнера..."
-            docker ps | grep iam-service
+            docker image prune -f
 
             echo "🎉 Развертывание IAM Service завершено!"
           ENDSSH
 
       - name: Verify Deployment
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
         run: |
-          echo "📋 Последние логи контейнера:"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            $VM_USER@$VM_HOST "docker logs --tail 30 iam-service"
-
-      - name: Notify on Success
-        if: success()
-        run: echo "✅ IAM Service deployment successful!"
-
-      - name: Notify on Failure
-        if: failure()
-        run: echo "❌ Deployment failed! Check the logs above."
+          echo "✅ IAM Service deployed successfully!"
