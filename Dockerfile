@@ -17,7 +17,9 @@ RUN npm install --only=production
 # Копируем собранный код из стадии сборки
 COPY --from=builder /app/dist ./dist
 
-# Копируем proto файлы (важно!)
+# Proto: server.js резолвит путь относительно dist/ (__dirname → /app/dist)
+COPY --from=builder /app/src/proto ./dist/proto
+# rest-proxy.js читает из ./src/proto относительно WORKDIR
 COPY --from=builder /app/src/proto ./src/proto
 
 # Копируем rest-proxy.js
