@@ -45,11 +45,17 @@ function createRestProxyApp() {
       const client = await getGrpcClient();
       client.Login(req.body, (err, response) => {
         if (err) {
+          console.error('gRPC Login error:', err);
           return res.status(401).json({ error: err.message });
         }
+        // Логируем ответ для отладки
+        console.log('gRPC Login response:', JSON.stringify(response, null, 2));
+        
+        // Возвращаем ответ как есть (он уже в camelCase)
         return res.json(response);
       });
     } catch (error) {
+      console.error('REST Login error:', error);
       return res.status(500).json({ error: error.message });
     }
   });

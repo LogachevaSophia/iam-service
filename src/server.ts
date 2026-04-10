@@ -148,7 +148,13 @@ async function main() {
             call.request.user_agent,
             call.request.ip_address
           );
-          callback(null, result);
+          // Явно формируем ответ с правильными полями
+          callback(null, {
+            access_token: result.accessToken,
+            refresh_token: result.refreshToken,
+            expires_in: result.expiresIn,
+            user: result.user
+          });
         } catch (error: any) {
           callback({ code: grpc.status.UNAUTHENTICATED, message: error.message }, null);
         }
