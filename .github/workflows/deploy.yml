@@ -1,19 +1,10 @@
-# Как в klin_recomendation: сборка образа в CI → docker save → scp на VM → docker load → docker run.
-# Реестр (ghcr) не используется.
-
-name: Deploy IAM to VM
+name: Deploy IAM Service to VM
 
 on:
-  pull_request:
-    types: [closed]
-    branches:
-      - main
-      - master
-  workflow_dispatch:
+  workflow_dispatch:  # Ручной запуск через GitHub UI
 
 jobs:
   deploy:
-    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -46,35 +37,69 @@ jobs:
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
-          IAM_HTTP_PORT: ${{ secrets.IAM_HTTP_PORT }}
         run: |
-          PORT="${IAM_HTTP_PORT:-3000}"
+          # Копируем образ на VM
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            iam-service.tar.gz "$VM_USER@$VM_HOST:/tmp/"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$VM_USER@$VM_HOST" << EOF
-          set -e
-          echo "Loading image..."
-          docker load -i /tmp/iam-service.tar.gz
-          echo "Restarting container..."
-          docker stop iam-service 2>/dev/null || true
-          docker rm iam-service 2>/dev/null || true
-          docker run -d \
-            --name iam-service \
-            --restart unless-stopped \
-            -p ${PORT}:3000 \
-            -p 50051:50051 \
-            --env-file /opt/iam-service/.env \
-            --add-host=host.docker.internal:host-gateway \
-            iam-service:latest
-          rm -f /tmp/iam-service.tar.gz
-          docker image prune -f
-          docker ps | grep iam-service
-          EOF
+            iam-service.tar.gz $VM_USER@$VM_HOST:/tmp/
 
-      - name: Verify deployment
+          # Деплой на VM
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << 'ENDSSH'
+            set -e
+
+            echo "🚀 Начало развертывания IAM Service..."
+
+            # Загружаем Docker image
+            echo "📦 Загрузка Docker образа..."
+            docker load -i /tmp/iam-service.tar.gz
+
+            # Останавливаем и удаляем старый контейнер
+            echo "🛑 Остановка старого контейнера..."
+            docker stop iam-service 2>/dev/null || true
+            docker rm iam-service 2>/dev/null || true
+
+            # Запускаем новый контейнер со всеми переменными
+            echo "▶️  Запуск нового контейнера..."
+            docker run -d \
+              --name iam-service \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              -p 50051:50051 \
+              -e PORT=50051 \
+              -e REST_PROXY_PORT=3000 \
+              -e NODE_ENV=production \
+              -e DATABASE_URL="postgresql://postgres:password@localhost:5432/iam" \
+              -e REDIS_HOST=localhost \
+              -e REDIS_PORT=6379 \
+              -e JWT_SECRET="your-super-secret-jwt-key-change-me" \
+              -e CLINREC_BASE_URL="http://51.250.100.64:8000" \
+              iam-service:latest
+
+            # Очищаем старые images
+            docker image prune -f
+
+            # Удаляем временный файл
+            rm -f /tmp/iam-service.tar.gz
+
+            # Проверяем статус
+            echo "✅ Проверка статуса контейнера..."
+            docker ps | grep iam-service
+
+            echo "🎉 Развертывание IAM Service завершено!"
+          ENDSSH
+
+      - name: Verify Deployment
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
         run: |
+          echo "📋 Последние логи контейнера:"
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            "$VM_USER@$VM_HOST" "docker logs --tail 40 iam-service"
+            $VM_USER@$VM_HOST "docker logs --tail 30 iam-service"
+
+      - name: Notify on Success
+        if: success()
+        run: echo "✅ IAM Service deployment successful!"
+
+      - name: Notify on Failure
+        if: failure()
+        run: echo "❌ Deployment failed! Check the logs above."
