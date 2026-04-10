@@ -1,41 +1,32 @@
 # Стадия сборки
-FROM node:20-alpine AS builder
+FROM node:20.19.0 as builder
 
 WORKDIR /app
-
-# Копируем package.json и устанавливаем зависимости
-COPY package*.json ./
-RUN npm ci
-
-# Копируем исходники и собираем TypeScript
 COPY . .
-RUN npm run build
+RUN npm install && npm run build
 
 # Стадия production
-FROM node:20-alpine
+FROM node:20.19.0
 
 WORKDIR /app
 
-# Устанавливаем только production зависимости
+# Копируем package.json и устанавливаем только production зависимости
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --only=production
 
-# Копируем собранный код и необходимые файлы
+# Копируем собранный код из стадии сборки
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/proto ./src/proto
-COPY rest-proxy.js ./
-COPY prisma ./prisma
+COPY --from=builder /app/rest-proxy.js ./
+COPY --from=builder /app/prisma ./prisma
 
-# Устанавливаем Prisma клиент
+# Генерируем Prisma клиент
 RUN npx prisma generate
 
-# Переменные окружения
-ENV PORT=50051
-ENV REST_PROXY_PORT=3000
-ENV NODE_ENV=production
+# Копируем .env (опционально, лучше через volume или secrets)
+# COPY .env ./
 
-# Открываем порты
-EXPOSE 50051 3000
+EXPOSE 3000 50051
 
-# Запускаем оба сервиса
+# Запускаем оба сервиса (gRPC и REST proxy)
 CMD ["sh", "-c", "node dist/server.js & node rest-proxy.js"]
