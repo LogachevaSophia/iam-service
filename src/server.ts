@@ -97,7 +97,17 @@ async function main() {
 
       UpdateUser: async (call: any, callback: any) => {
         try {
-          const user = await userServiceObj.updateUser(call.request.id, call.request);
+          const updateData = {
+            id: call.request.id,
+            email: call.request.email,
+            firstName: call.request.first_name,
+            lastName: call.request.last_name,
+            specialty: call.request.specialty,
+            department: call.request.department,
+            isActive: call.request.is_active,  // преобразуем snake_case в camelCase
+            metadata: call.request.metadata,
+          };
+          const user = await userServiceObj.updateUser(call.request.id, updateData);
           callback(null, user);
         } catch (error: any) {
           callback({ code: grpc.status.NOT_FOUND, message: error.message }, null);
