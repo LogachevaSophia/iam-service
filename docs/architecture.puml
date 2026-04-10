@@ -1,0 +1,119 @@
+' Схема стека: gateway + SPA (klin_recomendation) + IAM + Clinrec.
+' Рендер: VS Code PlantUML, plantuml.com/plantuml, или: java -jar plantuml.jar docs/architecture.puml
+
+@startuml iam-deployment
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+title Развёртывание (docker-compose): единая точка входа
+
+actor "Браузер" as browser
+
+node "Хост" as host {
+  component "Gateway\nnginx :8080→80" as gw #LightBlue
+  together {
+    component "SPA\nklin_recomendation\nnginx :80" as spa #Wheat
+    component "IAM контейнер\nNode.js" as iam #LightGreen
+  }
+  database "PostgreSQL" as pg
+  database "Redis" as redis
+}
+
+cloud "Внешний Clinrec\n(CLINREC_BASE_URL)" as clinrec #LightGray
+
+browser --> gw : HTTP\nединый origin
+
+gw --> spa : GET /\nстатика SPA
+gw --> iam : /api/*\n/health
+
+spa ..> gw : XHR /api/...\n(relative /api)
+
+iam --> pg : Prisma\n(users, sessions…)
+iam --> redis : кэш / сессии\n(если используется)
+iam --> clinrec : rest-proxy:\n/api/* кроме IAM\n→ HTTP upstream
+
+note right of gw
+  **VITE_API_BASE_URL=/api**
+  Браузер не ходит напрямую на :3000 —
+  только на gateway (CORS не нужен для same-origin).
+end note
+
+note bottom of iam
+  В одном процессе/контейнере:
+  • gRPC IAM :50051
+  • rest-proxy Express :3000
+ IAM-маршруты: /api/login, /api/check,
+  /api/users, GET /api/user/:id
+end note
+
+@enduml
+
+
+@startuml iam-sequence-api
+!theme plain
+title Запросы API: кто куда
+
+actor Клиент as c
+participant "Gateway\nnginx" as g
+participant "rest-proxy\n:3000" as rp
+participant "IAM\ngRPC" as grpc
+participant "Clinrec\nbackend" as cr
+
+c -> g : POST /api/login
+g -> rp : proxy
+rp -> grpc : Login(...)
+grpc --> rp : JWT / ответ
+rp --> g
+g --> c :200 JSON
+
+c -> g : GET /api/v1/...
+g -> rp : proxy
+rp -> cr : HTTP (CLINREC_BASE_URL + path)
+cr --> rp
+rp --> g
+g --> c
+
+c -> g : GET /
+g -> c : HTML/JS SPA
+
+@enduml
+
+
+@startuml iam-sequence-direct
+!theme plain
+title Локальная отладка без gateway (опционально)
+
+actor Разработчик as dev
+participant "rest-proxy\nlocalhost:3000" as rp
+participant "vite dev\nили SPA" as fe
+
+dev -> fe : UI
+fe -> rp : VITE_API_BASE_URL=\nhttp://localhost:3000/api
+rp -> rp : IAM или Clinrec\nпо правилам маршрутизации
+
+note right of fe
+  Нужен CORS на rest-proxy\n(уже включён cors()).
+end note
+
+@enduml
+
+
+@startuml iam-deploy-vm
+!theme plain
+title Деплой IAM без registry (как klin_recomendation)
+
+participant "GitHub Actions" as ga
+participant "VM" as vm
+
+ga -> ga : docker build\niam-service:latest
+ga -> ga : docker save | gzip
+ga -> vm : scp tar.gz
+vm -> vm : docker load
+vm -> vm : docker run …\n-p PORT:3000\n--env-file /opt/iam-service/.env
+
+note bottom of vm
+  Postgres/Redis могут быть\nна той же VM или снаружи\n(DATABASE_URL в .env).
+  Фронт и gateway деплоятся\nотдельно (другой репозиторий / compose).
+end note
+
+@enduml

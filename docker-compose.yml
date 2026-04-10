@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # PostgreSQL для IAM
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: iam
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis для кэширования
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # IAM сервис (gRPC + REST proxy)
+  iam-service:
+    build: ./iam_service
+    ports:
+      - "50051:50051"  # gRPC
+      - "3000:3000"    # REST proxy
+    environment:
+      - PORT=50051
+      - REST_PROXY_PORT=3000
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/iam
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=your-secret-key-change-in-production
+      - CLINREC_BASE_URL=http://51.250.100.64:8000
+      - NODE_ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Gateway (nginx)
+  gateway:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - iam-service
+      - klin-recomendation
+
+  # SPA фронтенд
+  klin-recomendation:
+    build: ./klin_recomendation
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=http://gateway:8080/api
+
+volumes:
+  postgres_data:

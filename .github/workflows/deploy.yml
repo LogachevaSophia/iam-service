@@ -1,0 +1,80 @@
+# Как в klin_recomendation: сборка образа в CI → docker save → scp на VM → docker load → docker run.
+# Реестр (ghcr) не используется.
+
+name: Deploy IAM to VM
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: iam-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save Docker image
+        run: |
+          docker save iam-service:latest | gzip > iam-service.tar.gz
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Deploy to VM
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          IAM_HTTP_PORT: ${{ secrets.IAM_HTTP_PORT }}
+        run: |
+          PORT="${IAM_HTTP_PORT:-3000}"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            iam-service.tar.gz "$VM_USER@$VM_HOST:/tmp/"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$VM_USER@$VM_HOST" << EOF
+          set -e
+          echo "Loading image..."
+          docker load -i /tmp/iam-service.tar.gz
+          echo "Restarting container..."
+          docker stop iam-service 2>/dev/null || true
+          docker rm iam-service 2>/dev/null || true
+          docker run -d \
+            --name iam-service \
+            --restart unless-stopped \
+            -p ${PORT}:3000 \
+            -p 50051:50051 \
+            --env-file /opt/iam-service/.env \
+            --add-host=host.docker.internal:host-gateway \
+            iam-service:latest
+          rm -f /tmp/iam-service.tar.gz
+          docker image prune -f
+          docker ps | grep iam-service
+          EOF
+
+      - name: Verify deployment
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "$VM_USER@$VM_HOST" "docker logs --tail 40 iam-service"

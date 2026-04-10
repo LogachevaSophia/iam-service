@@ -1,0 +1,10 @@
+{"level":"info","message":"Starting IAM Service...","service":"iam-service","timestamp":"2026-03-26 22:05:49"}
+{"level":"info","message":"Redis connected successfully","service":"iam-service","timestamp":"2026-03-26 22:05:49"}
+{"level":"info","message":"IAM Service running on 0.0.0.0:50051","service":"iam-service","timestamp":"2026-03-26 22:05:49"}
+{"level":"info","message":"User logged in: doctor@example.com (cmn7udfyg0012wceoxw3d7k2c)","service":"iam-service","timestamp":"2026-03-26 22:20:03"}
+{"level":"info","message":"SIGTERM received, shutting down...","service":"iam-service","timestamp":"2026-04-01 13:05:38"}
+{"level":"info","message":"User created: a@b.c (u1)","service":"iam-service","timestamp":"2026-04-06 17:45:36"}
+{"level":"info","message":"Starting IAM Service...","service":"iam-service","timestamp":"2026-04-10 21:06:12"}
+{"level":"info","message":"Redis connected successfully","service":"iam-service","timestamp":"2026-04-10 21:06:13"}
+{"level":"info","message":"IAM Service running on 0.0.0.0:50051","service":"iam-service","timestamp":"2026-04-10 21:06:13"}
+{"level":"info","message":"SIGINT received, shutting down...","service":"iam-service","timestamp":"2026-04-10 21:06:15"}

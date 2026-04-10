@@ -1,0 +1,282 @@
+syntax = "proto3";
+
+package iam;
+
+service IAMService {
+  // Проверка одного разрешения
+  rpc CheckPermission (PermissionRequest) returns (PermissionResponse);
+  
+  // Проверка нескольких разрешений
+  rpc BatchCheck (BatchPermissionRequest) returns (BatchPermissionResponse);
+  
+  // Управление пользователями
+  rpc CreateUser (CreateUserRequest) returns (UserResponse);
+  rpc GetUser (GetUserRequest) returns (UserResponse);
+  rpc UpdateUser (UpdateUserRequest) returns (UserResponse);
+  rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse);
+  rpc ListUsers (ListUsersRequest) returns (ListUsersResponse);
+  
+  // Управление ролями
+  rpc CreateRole (CreateRoleRequest) returns (RoleResponse);
+  rpc GetRole (GetRoleRequest) returns (RoleResponse);
+  rpc UpdateRole (UpdateRoleRequest) returns (RoleResponse);
+  rpc DeleteRole (DeleteRoleRequest) returns (DeleteRoleResponse);
+  rpc ListRoles (ListRolesRequest) returns (ListRolesResponse);
+  
+  // Назначение ролей
+  rpc AssignRole (AssignRoleRequest) returns (AssignRoleResponse);
+  rpc RevokeRole (RevokeRoleRequest) returns (RevokeRoleResponse);
+  rpc GetUserRoles (GetUserRolesRequest) returns (GetUserRolesResponse);
+  
+  // Управление пермишенами
+  rpc CreatePermission (CreatePermissionRequest) returns (Permission);
+  rpc ListPermissions (ListPermissionsRequest) returns (ListPermissionsResponse);
+  
+  // Аутентификация
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc Logout (LogoutRequest) returns (LogoutResponse);
+  rpc RefreshToken (RefreshTokenRequest) returns (LoginResponse);
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
+}
+
+// Common messages
+message PermissionRequest {
+  string user_id = 1;
+  string action = 2;
+  string resource = 3;
+  optional string resource_id = 4;
+  map<string, string> metadata = 5;
+}
+
+message PermissionResponse {
+  bool allowed = 1;
+  string reason = 2;
+  repeated string constraints = 3;
+}
+
+message BatchPermissionRequest {
+  string user_id = 1;
+  repeated PermissionRequest permissions = 2;
+}
+
+message BatchPermissionResponse {
+  repeated PermissionResponse results = 1;
+}
+
+// User management
+message CreateUserRequest {
+  string email = 1;
+  string password = 2;
+  string first_name = 3;
+  string last_name = 4;
+  optional string specialty = 5;
+  optional string department = 6;
+  map<string, string> metadata = 7;
+}
+
+message UserResponse {
+  string id = 1;
+  string email = 2;
+  string first_name = 3;
+  string last_name = 4;
+  optional string specialty = 5;
+  optional string department = 6;
+  bool is_active = 7;
+  map<string, string> metadata = 8;
+  string created_at = 9;
+  optional string last_login_at = 10;
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message UpdateUserRequest {
+  string id = 1;
+  optional string email = 2;
+  optional string first_name = 3;
+  optional string last_name = 4;
+  optional string specialty = 5;
+  optional string department = 6;
+  optional bool is_active = 7;
+  map<string, string> metadata = 8;
+}
+
+message DeleteUserRequest {
+  string id = 1;
+}
+
+message DeleteUserResponse {
+  bool success = 1;
+}
+
+message ListUsersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  optional string specialty = 3;
+  optional bool is_active = 4;
+  string sort_by = 5;
+  string sort_order = 6;
+}
+
+message ListUsersResponse {
+  repeated UserResponse users = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// Role management
+message CreateRoleRequest {
+  string name = 1;
+  string description = 2;
+  repeated string permission_ids = 3;
+}
+
+message RoleResponse {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  bool is_system = 4;
+  string created_at = 5;
+  repeated Permission permissions = 6;
+}
+
+message GetRoleRequest {
+  string id = 1;
+}
+
+message UpdateRoleRequest {
+  string id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  repeated string permission_ids = 4;
+}
+
+message DeleteRoleRequest {
+  string id = 1;
+}
+
+message DeleteRoleResponse {
+  bool success = 1;
+}
+
+message ListRolesRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  bool include_system = 3;
+}
+
+message ListRolesResponse {
+  repeated RoleResponse roles = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// Role assignment
+message AssignRoleRequest {
+  string user_id = 1;
+  string role_id = 2;
+  map<string, string> scope = 3;
+  optional int32 expires_in_days = 4;
+  string granted_by = 5;
+}
+
+message AssignRoleResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RevokeRoleRequest {
+  string user_id = 1;
+  string role_id = 2;
+}
+
+message RevokeRoleResponse {
+  bool success = 1;
+}
+
+message GetUserRolesRequest {
+  string user_id = 1;
+}
+
+message GetUserRolesResponse {
+  repeated UserRoleInfo roles = 1;
+}
+
+message UserRoleInfo {
+  string role_id = 1;
+  string role_name = 2;
+  map<string, string> scope = 3;
+  string granted_at = 4;
+  optional string expires_at = 5;
+}
+
+// Permission management
+message Permission {
+  string id = 1;
+  string action = 2;
+  string resource = 3;
+  string conditions = 4; // JSON string
+  string description = 5;
+  string created_at = 6;
+}
+
+message CreatePermissionRequest {
+  string action = 1;
+  string resource = 2;
+  string conditions = 3;
+  string description = 4;
+}
+
+message ListPermissionsRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  optional string action = 3;
+  optional string resource = 4;
+}
+
+message ListPermissionsResponse {
+  repeated Permission permissions = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// Authentication
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+  optional string user_agent = 3;
+  optional string ip_address = 4;
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int32 expires_in = 3;
+  UserResponse user = 4;
+}
+
+message LogoutRequest {
+  string token = 1;
+}
+
+message LogoutResponse {
+  bool success = 1;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  string user_id = 2;
+  map<string, string> claims = 3;
+}
