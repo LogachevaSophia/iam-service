@@ -16,17 +16,20 @@ RUN npm install --only=production
 
 # Копируем собранный код из стадии сборки
 COPY --from=builder /app/dist ./dist
+
+# Копируем proto файлы (важно!)
 COPY --from=builder /app/src/proto ./src/proto
+
+# Копируем rest-proxy.js
 COPY --from=builder /app/rest-proxy.js ./
+
+# Копируем prisma схему
 COPY --from=builder /app/prisma ./prisma
 
 # Генерируем Prisma клиент
 RUN npx prisma generate
 
-# Копируем .env (опционально, лучше через volume или secrets)
-# COPY .env ./
-
 EXPOSE 3000 50051
 
-# Запускаем оба сервиса (gRPC и REST proxy)
+# Запускаем оба сервиса
 CMD ["sh", "-c", "node dist/server.js & node rest-proxy.js"]
