@@ -133,11 +133,27 @@ function createRestProxyApp() {
         is_active: req.query.is_active === 'true',
       }, (err, response) => {
         if (err) {
+          console.error('gRPC ListUsers error:', err);
           return res.status(500).json({ error: err.message });
         }
-        return res.json(response);
+        const result = {
+          users: (response.users || []).map(user => ({
+            id: user.id,
+            email: user.email,
+            first_name: user.firstName,
+            last_name: user.lastName,
+            is_active: user.isActive,
+            created_at: user.createdAt,
+            last_login_at: user.lastLoginAt
+          })),
+          total: response.total || 0,
+          page: response.page || 1,
+          page_size: response.pageSize || 20
+        };
+        return res.json(result);
       });
     } catch (error) {
+      console.error('REST ListUsers error:', error);
       return res.status(500).json({ error: error.message });
     }
   });
