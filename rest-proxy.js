@@ -44,7 +44,7 @@ function createRestProxyApp() {
   app.use(cors());
   app.use(express.json());
 
-  const authMiddleware = require('./middleware/auth');
+  const authMiddleware = require('./src/middleware/auth');
   app.use('/api', authMiddleware);
 
   // Health check
@@ -353,6 +353,56 @@ function createRestProxyApp() {
     }
   });
 
+  /** Список прав пользователя: объединение Permission из всех ролей (для фронта). */
+  app.get('/api/users/:userId/permissions', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      const userId = req.params.userId;
+      client.GetUserRoles({ user_id: userId }, (err, response) => {
+        if (err) {
+          return res.status(404).json({ error: err.message });
+        }
+        const roles = response.roles || [];
+        if (roles.length === 0) {
+          return res.json({ permissions: [] });
+        }
+        const merged = [];
+        const seen = new Set();
+        let remaining = roles.length;
+        let responded = false;
+        const finish = () => {
+          remaining -= 1;
+          if (remaining === 0 && !responded) {
+            responded = true;
+            return res.json({ permissions: merged });
+          }
+        };
+        for (const r of roles) {
+          const roleId = r.role_id;
+          client.GetRole({ id: roleId }, (e2, roleResp) => {
+            if (e2) {
+              console.error('GetRole error for permissions aggregate:', e2);
+            } else if (roleResp && roleResp.permissions) {
+              for (const p of roleResp.permissions) {
+                const action = p.action;
+                const resource = p.resource;
+                if (!action || !resource) continue;
+                const key = `${action}|${resource}`;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  merged.push({ action, resource });
+                }
+              }
+            }
+            finish();
+          });
+        }
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   // ========== PROXY ALL OTHER /api/* TO CLINREC ==========
   app.use('/api/', (req, res, next) => {
     const iamRoutes = ['login', 'logout', 'refresh', 'check', 'users', 'user', 'permissions', 'roles'];
@@ -441,6 +491,7 @@ if (require.main === module) {
     console.log(`   POST   ${base}/api/users/assign-role`);
     console.log(`   POST   ${base}/api/users/:userId/revoke-role/:roleId`);
     console.log(`   GET    ${base}/api/users/:userId/roles`);
+    console.log(`   GET    ${base}/api/users/:userId/permissions`);
     console.log('\n📋 Clinrec Routes (proxied):');
     console.log(`   Все запросы на /api/* (кроме IAM) → ${CLINREC_BASE}`);
     console.log(`\n✅ Health check: ${base}/health\n`);
