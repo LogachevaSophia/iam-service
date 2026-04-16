@@ -44,7 +44,7 @@ exports.config = {
     },
     /** Clinrec Backend REST (Swagger: /swagger/index.html → doc.json) */
     clinrec: {
-        baseUrl: (process.env.CLINREC_BASE_URL || 'http://51.250.100.64:8000').replace(/\/+$/, ''),
+        baseUrl: (process.env.CLINREC_BASE_URL || 'http://51.250.100.64:8081').replace(/\/+$/, ''),
         /** Optional Bearer token for protected routes (e.g. POST /api/v1/process) */
         apiToken: process.env.CLINREC_API_TOKEN,
     },
