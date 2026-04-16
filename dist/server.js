@@ -43,6 +43,7 @@ const config_1 = require("./config");
 const permission_service_1 = require("./services/permission.service");
 const user_service_1 = require("./services/user.service");
 const logger_1 = __importDefault(require("./utils/logger"));
+const role_service_1 = require("./services/role.service");
 const PROTO_PATH = path_1.default.join(__dirname, './proto/iam.proto');
 async function main() {
     console.log('🚀 Starting IAM Service...');
@@ -117,7 +118,17 @@ async function main() {
             },
             UpdateUser: async (call, callback) => {
                 try {
-                    const user = await userServiceObj.updateUser(call.request.id, call.request);
+                    const updateData = {
+                        id: call.request.id,
+                        email: call.request.email,
+                        firstName: call.request.first_name,
+                        lastName: call.request.last_name,
+                        specialty: call.request.specialty,
+                        department: call.request.department,
+                        isActive: call.request.is_active,
+                        metadata: call.request.metadata,
+                    };
+                    const user = await userServiceObj.updateUser(call.request.id, updateData);
                     callback(null, user);
                 }
                 catch (error) {
@@ -149,7 +160,12 @@ async function main() {
             Login: async (call, callback) => {
                 try {
                     const result = await userServiceObj.login(call.request.email, call.request.password, call.request.user_agent, call.request.ip_address);
-                    callback(null, result);
+                    callback(null, {
+                        access_token: result.accessToken,
+                        refresh_token: result.refreshToken,
+                        expires_in: result.expiresIn,
+                        user: result.user
+                    });
                 }
                 catch (error) {
                     callback({ code: grpc.status.UNAUTHENTICATED, message: error.message }, null);
@@ -182,36 +198,116 @@ async function main() {
                     callback(null, { valid: false });
                 }
             },
-            // Role management (stubs - not implemented)
-            CreateRole: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            // Role management
+            CreateRole: async (call, callback) => {
+                try {
+                    const result = await role_service_1.roleService.createRole({
+                        name: call.request.name,
+                        description: call.request.description,
+                        permissionIds: call.request.permission_ids
+                    });
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback({ code: grpc.status.ALREADY_EXISTS, message: error.message }, null);
+                }
             },
-            GetRole: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            GetRole: async (call, callback) => {
+                try {
+                    const result = await role_service_1.roleService.getRole(call.request.id);
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback({ code: grpc.status.NOT_FOUND, message: error.message }, null);
+                }
             },
-            UpdateRole: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            UpdateRole: async (call, callback) => {
+                try {
+                    const result = await role_service_1.roleService.updateRole(call.request.id, {
+                        name: call.request.name,
+                        description: call.request.description,
+                        permissionIds: call.request.permission_ids
+                    });
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback({ code: grpc.status.NOT_FOUND, message: error.message }, null);
+                }
             },
-            DeleteRole: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            DeleteRole: async (call, callback) => {
+                try {
+                    const result = await role_service_1.roleService.deleteRole(call.request.id);
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback({ code: grpc.status.FAILED_PRECONDITION, message: error.message }, null);
+                }
             },
-            ListRoles: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            ListRoles: async (call, callback) => {
+                try {
+                    const result = await role_service_1.roleService.listRoles(call.request.page || 1, call.request.page_size || 20, call.request.include_system || false);
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback(error, null);
+                }
             },
-            AssignRole: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            AssignRole: async (call, callback) => {
+                try {
+                    const result = await role_service_1.roleService.assignRole({
+                        userId: call.request.user_id,
+                        roleId: call.request.role_id,
+                        scope: call.request.scope,
+                        expiresInDays: call.request.expires_in_days,
+                        grantedBy: call.request.granted_by
+                    });
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback({ code: grpc.status.NOT_FOUND, message: error.message }, null);
+                }
             },
-            RevokeRole: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            RevokeRole: async (call, callback) => {
+                try {
+                    const result = await role_service_1.roleService.revokeRole(call.request.user_id, call.request.role_id);
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback(error, null);
+                }
             },
-            GetUserRoles: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            GetUserRoles: async (call, callback) => {
+                try {
+                    const result = await role_service_1.roleService.getUserRoles(call.request.user_id);
+                    callback(null, { roles: result });
+                }
+                catch (error) {
+                    callback(error, null);
+                }
             },
-            CreatePermission: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            // Permission management
+            CreatePermission: async (call, callback) => {
+                try {
+                    const result = await permissionService.createPermission({
+                        action: call.request.action,
+                        resource: call.request.resource,
+                        conditions: call.request.conditions ? JSON.parse(call.request.conditions) : undefined,
+                        description: call.request.description
+                    });
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback({ code: grpc.status.ALREADY_EXISTS, message: error.message }, null);
+                }
             },
-            ListPermissions: async (_call, callback) => {
-                callback({ code: grpc.status.UNIMPLEMENTED, message: 'Not implemented yet' }, null);
+            ListPermissions: async (call, callback) => {
+                try {
+                    const result = await permissionService.listPermissions(call.request.page || 1, call.request.page_size || 20, call.request.action, call.request.resource);
+                    callback(null, result);
+                }
+                catch (error) {
+                    callback(error, null);
+                }
             },
         });
         const address = `0.0.0.0:${config_1.config.server.port}`;

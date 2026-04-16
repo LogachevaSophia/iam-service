@@ -21,10 +21,15 @@ export declare class ClinrecClient {
     private headersForJson;
     private handleResponse;
     getProcess(processId: string): Promise<ClinrecProcess>;
+    /** GET /api/v1/process/all — список процессов (см. Swagger doc.json) */
+    listProcessesAll(): Promise<ClinrecProcess[]>;
     /**
      * Creates a process. Backend marks POST as Bearer-protected; pass token via options or CLINREC_API_TOKEN.
      */
     createProcess(body: ClinrecProcess, bearerTokenOverride?: string): Promise<ClinrecProcess>;
+    /**
+     * PUT /api/v1/process — тело процесса (в Swagger без id в path; process_id в JSON).
+     */
     updateProcess(processId: string, body: ClinrecProcess): Promise<string>;
     deleteProcess(processId: string): Promise<string>;
 }

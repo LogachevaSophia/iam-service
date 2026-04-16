@@ -16,5 +16,31 @@ export declare class PermissionService {
     private getUserPermissionsWithRoles;
     private getResourceInfo;
     private logAudit;
+    createPermission(data: {
+        action: string;
+        resource: string;
+        conditions?: any;
+        description?: string;
+    }): Promise<{
+        id: string;
+        action: string;
+        resource: string;
+        conditions: import("@prisma/client/runtime/library").JsonValue | null;
+        description: string | null;
+        createdAt: Date;
+    }>;
+    listPermissions(page?: number, pageSize?: number, action?: string, resource?: string): Promise<{
+        permissions: {
+            id: string;
+            action: string;
+            resource: string;
+            conditions: import("@prisma/client/runtime/library").JsonValue | null;
+            description: string | null;
+            createdAt: Date;
+        }[];
+        total: number;
+        page: number;
+        pageSize: number;
+    }>;
 }
 //# sourceMappingURL=permission.service.d.ts.map

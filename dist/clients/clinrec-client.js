@@ -59,12 +59,26 @@ class ClinrecClient {
     }
     async getProcess(processId) {
         const url = new URL(`${this.baseUrl}/api/v1/process`);
-        url.searchParams.set('id', processId);
+        url.searchParams.set('process_id', processId);
         const res = await this.fetchImpl(url.toString(), {
             method: 'GET',
             headers: this.headersForJson(),
         });
         return this.handleResponse(res);
+    }
+    /** GET /api/v1/process/all — список процессов (см. Swagger doc.json) */
+    async listProcessesAll() {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/process/all`, {
+            method: 'GET',
+            headers: this.headersForJson(),
+        });
+        const data = await this.handleResponse(res);
+        if (data == null)
+            return [];
+        if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
+            return data[0];
+        }
+        return data;
     }
     /**
      * Creates a process. Backend marks POST as Bearer-protected; pass token via options or CLINREC_API_TOKEN.
@@ -82,12 +96,16 @@ class ClinrecClient {
         });
         return this.handleResponse(res);
     }
+    /**
+     * PUT /api/v1/process — тело процесса (в Swagger без id в path; process_id в JSON).
+     */
     async updateProcess(processId, body) {
-        const url = `${this.baseUrl}/api/v1/process/${encodeURIComponent(processId)}`;
+        const payload = { ...body, process_id: body.process_id ?? processId };
+        const url = `${this.baseUrl}/api/v1/process`;
         const res = await this.fetchImpl(url, {
             method: 'PUT',
             headers: this.headersForJson({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify(body),
+            body: JSON.stringify(payload),
         });
         if (res.ok) {
             return res.text();
@@ -97,7 +115,7 @@ class ClinrecClient {
     }
     async deleteProcess(processId) {
         const url = new URL(`${this.baseUrl}/api/v1/process`);
-        url.searchParams.set('id', processId);
+        url.searchParams.set('process_id', processId);
         const res = await this.fetchImpl(url.toString(), {
             method: 'DELETE',
             headers: this.headersForJson(),

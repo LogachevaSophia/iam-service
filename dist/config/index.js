@@ -7,6 +7,13 @@ exports.config = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config({ path: path_1.default.join(__dirname, '../../.env') });
+function requireClinrecBaseUrl() {
+    const raw = process.env.CLINREC_BASE_URL;
+    if (raw == null || String(raw).trim() === '') {
+        throw new Error('CLINREC_BASE_URL is required (set in .env or environment; in CI use secrets).');
+    }
+    return String(raw).replace(/\/+$/, '');
+}
 exports.config = {
     server: {
         port: parseInt(process.env.PORT || '50051'),
@@ -44,7 +51,7 @@ exports.config = {
     },
     /** Clinrec Backend REST (Swagger: /swagger/index.html → doc.json) */
     clinrec: {
-        baseUrl: (process.env.CLINREC_BASE_URL || 'http://51.250.100.64:8081').replace(/\/+$/, ''),
+        baseUrl: requireClinrecBaseUrl(),
         /** Optional Bearer token for protected routes (e.g. POST /api/v1/process) */
         apiToken: process.env.CLINREC_API_TOKEN,
     },

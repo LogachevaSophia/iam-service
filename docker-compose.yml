@@ -42,7 +42,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - JWT_SECRET=your-secret-key-change-in-production
-      - CLINREC_BASE_URL=http://51.250.100.64:8081
+      # Задайте в корневом .env рядом с compose (не коммитьте прод-хосты)
+      - CLINREC_BASE_URL=${CLINREC_BASE_URL}
       - NODE_ENV=development
     depends_on:
       postgres:

@@ -217,7 +217,10 @@ class UserService {
     }
     sanitizeUser(user) {
         const { passwordHash, ...sanitized } = user;
-        return sanitized;
+        return {
+            ...sanitized,
+            is_active: user.isActive, // добавляем snake_case поле для API
+        };
     }
 }
 exports.UserService = UserService;

@@ -6,7 +6,17 @@ const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const cors = require('cors');
 
-const CLINREC_BASE = (process.env.CLINREC_BASE_URL || 'http://51.250.100.64:8081').replace(/\/+$/, '');
+function requireClinrecBase() {
+  const raw = process.env.CLINREC_BASE_URL;
+  if (!raw || !String(raw).trim()) {
+    throw new Error(
+      'CLINREC_BASE_URL is required (set in .env or environment; in CI inject from secrets).',
+    );
+  }
+  return String(raw).replace(/\/+$/, '');
+}
+
+const CLINREC_BASE = requireClinrecBase();
 const REST_PROXY_PORT = parseInt(process.env.REST_PROXY_PORT || '3000', 10);
 const PROTO_PATH = path.join(__dirname, 'src/proto/iam.proto');
 const IAM_GRPC_ADDR = process.env.IAM_GRPC_ADDR || 'localhost:50051';

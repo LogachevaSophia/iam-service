@@ -126,6 +126,36 @@ class PermissionService {
             duration,
         });
     }
+    // Управление разрешениями (CRUD)
+    async createPermission(data) {
+        const permission = await prisma.permission.create({
+            data: {
+                id: `${data.action}_${data.resource}`,
+                action: data.action,
+                resource: data.resource,
+                conditions: data.conditions || {},
+                description: data.description
+            }
+        });
+        return permission;
+    }
+    async listPermissions(page = 1, pageSize = 20, action, resource) {
+        const where = {};
+        if (action)
+            where.action = action;
+        if (resource)
+            where.resource = resource;
+        const [permissions, total] = await Promise.all([
+            prisma.permission.findMany({
+                where,
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+                orderBy: [{ resource: 'asc' }, { action: 'asc' }]
+            }),
+            prisma.permission.count({ where })
+        ]);
+        return { permissions, total, page, pageSize };
+    }
 }
 exports.PermissionService = PermissionService;
 //# sourceMappingURL=permission.service.js.map
