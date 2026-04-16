@@ -136,6 +136,11 @@ function createRestProxyApp() {
           console.error('gRPC ListUsers error:', err);
           return res.status(500).json({ error: err.message });
         }
+        // Логируем полный ответ для отладки
+        console.log('Full gRPC response:', JSON.stringify(response, null, 2));
+        console.log('Response keys:', Object.keys(response));
+        console.log('Users array:', response.users);
+        
         const result = {
           users: (response.users || []).map(user => ({
             id: user.id,
