@@ -58,10 +58,7 @@ function createRestProxyApp() {
           console.error('gRPC Login error:', err);
           return res.status(401).json({ error: err.message });
         }
-        // Логируем ответ для отладки
         console.log('gRPC Login response:', JSON.stringify(response, null, 2));
-        
-        // Возвращаем ответ как есть (он уже в camelCase)
         return res.json(response);
       });
     } catch (error) {
@@ -187,19 +184,165 @@ function createRestProxyApp() {
     }
   });
 
+  // ========== PERMISSION MANAGEMENT ROUTES ==========
+  app.post('/api/permissions', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.CreatePermission(req.body, (err, response) => {
+        if (err) {
+          return res.status(409).json({ error: err.message });
+        }
+        return res.status(201).json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/permissions', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.ListPermissions({
+        page: parseInt(req.query.page) || 1,
+        page_size: parseInt(req.query.page_size) || 20,
+        action: req.query.action,
+        resource: req.query.resource
+      }, (err, response) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        return res.json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== ROLE MANAGEMENT ROUTES ==========
+  app.post('/api/roles', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.CreateRole(req.body, (err, response) => {
+        if (err) {
+          return res.status(409).json({ error: err.message });
+        }
+        return res.status(201).json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/roles', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.ListRoles({
+        page: parseInt(req.query.page) || 1,
+        page_size: parseInt(req.query.page_size) || 20,
+        include_system: req.query.include_system === 'true'
+      }, (err, response) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        return res.json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/roles/:id', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.GetRole({ id: req.params.id }, (err, response) => {
+        if (err) {
+          return res.status(404).json({ error: err.message });
+        }
+        return res.json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put('/api/roles/:id', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.UpdateRole({ id: req.params.id, ...req.body }, (err, response) => {
+        if (err) {
+          return res.status(404).json({ error: err.message });
+        }
+        return res.json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/roles/:id', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.DeleteRole({ id: req.params.id }, (err, response) => {
+        if (err) {
+          return res.status(404).json({ error: err.message });
+        }
+        return res.json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/users/assign-role', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.AssignRole(req.body, (err, response) => {
+        if (err) {
+          return res.status(404).json({ error: err.message });
+        }
+        return res.json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/users/:userId/revoke-role/:roleId', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.RevokeRole({ user_id: req.params.userId, role_id: req.params.roleId }, (err, response) => {
+        if (err) {
+          return res.status(404).json({ error: err.message });
+        }
+        return res.json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/users/:userId/roles', async (req, res) => {
+    try {
+      const client = await getGrpcClient();
+      client.GetUserRoles({ user_id: req.params.userId }, (err, response) => {
+        if (err) {
+          return res.status(404).json({ error: err.message });
+        }
+        return res.json(response);
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   // ========== PROXY ALL OTHER /api/* TO CLINREC ==========
-  // Используем middleware, который срабатывает для всех запросов,
-  // начинающихся с /api/, но пропускаем уже обработанные IAM маршруты
   app.use('/api/', (req, res, next) => {
-    // Пропускаем, если это IAM маршрут (они уже обработаны выше,
-    // но на всякий случай проверяем)
-    const iamRoutes = ['login', 'logout', 'refresh', 'check', 'users', 'user'];
+    const iamRoutes = ['login', 'logout', 'refresh', 'check', 'users', 'user', 'permissions', 'roles'];
     const pathPart = req.path.split('/')[1];
     if (iamRoutes.includes(pathPart)) {
       return next();
     }
     
-    // Проксируем в Clinrec
     (async () => {
       try {
         const targetUrl = `${CLINREC_BASE}${req.originalUrl}`;
@@ -254,7 +397,6 @@ module.exports = {
   REST_PROXY_PORT,
 };
 
-// Запуск если файл вызван напрямую
 if (require.main === module) {
   const app = createRestProxyApp();
   app.listen(REST_PROXY_PORT, () => {
@@ -271,6 +413,16 @@ if (require.main === module) {
     console.log(`   POST   ${base}/api/users`);
     console.log(`   PUT    ${base}/api/user/:id`);
     console.log(`   DELETE ${base}/api/user/:id`);
+    console.log(`   POST   ${base}/api/permissions`);
+    console.log(`   GET    ${base}/api/permissions`);
+    console.log(`   POST   ${base}/api/roles`);
+    console.log(`   GET    ${base}/api/roles`);
+    console.log(`   GET    ${base}/api/roles/:id`);
+    console.log(`   PUT    ${base}/api/roles/:id`);
+    console.log(`   DELETE ${base}/api/roles/:id`);
+    console.log(`   POST   ${base}/api/users/assign-role`);
+    console.log(`   POST   ${base}/api/users/:userId/revoke-role/:roleId`);
+    console.log(`   GET    ${base}/api/users/:userId/roles`);
     console.log('\n📋 Clinrec Routes (proxied):');
     console.log(`   Все запросы на /api/* (кроме IAM) → ${CLINREC_BASE}`);
     console.log(`\n✅ Health check: ${base}/health\n`);
