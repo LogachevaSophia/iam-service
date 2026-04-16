@@ -22,6 +22,9 @@ COPY --from=builder /app/src/proto ./dist/proto
 # rest-proxy.js читает из ./src/proto относительно WORKDIR
 COPY --from=builder /app/src/proto ./src/proto
 
+# rest-proxy.js: require('./src/middleware/auth')
+COPY --from=builder /app/src/middleware ./src/middleware
+
 # Копируем rest-proxy.js
 COPY --from=builder /app/rest-proxy.js ./
 
