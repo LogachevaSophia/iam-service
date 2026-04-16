@@ -25,7 +25,7 @@ let grpcClient = null;
 
 async function getGrpcClient() {
   if (grpcClient) return grpcClient;
-  
+
   const packageDefinition = await protoLoader.load(PROTO_PATH, {
     keepCase: true,
     longs: String,
@@ -33,7 +33,7 @@ async function getGrpcClient() {
     defaults: true,
     oneofs: true,
   });
-  
+
   const iamProto = grpc.loadPackageDefinition(packageDefinition).iam;
   grpcClient = new iamProto.IAMService(IAM_GRPC_ADDR, grpc.credentials.createInsecure());
   return grpcClient;
@@ -43,6 +43,9 @@ function createRestProxyApp() {
   const app = express();
   app.use(cors());
   app.use(express.json());
+
+  const authMiddleware = require('./middleware/auth');
+  app.use('/api', authMiddleware);
 
   // Health check
   app.get('/health', (_req, res) => {
@@ -132,7 +135,7 @@ function createRestProxyApp() {
           console.error('gRPC ListUsers error:', err);
           return res.status(500).json({ error: err.message });
         }
-        
+
         // Трансформируем ответ в нужный формат
         const result = {
           users: (response.users || []).map(user => ({
@@ -148,7 +151,7 @@ function createRestProxyApp() {
           page: response.page || 1,
           page_size: response.page_size || 20
         };
-        
+
         return res.json(result);
       });
     } catch (error) {
@@ -357,39 +360,39 @@ function createRestProxyApp() {
     if (iamRoutes.includes(pathPart)) {
       return next();
     }
-    
+
     (async () => {
       try {
         const targetUrl = `${CLINREC_BASE}${req.originalUrl}`;
-        
+
         const headers = {
           Accept: 'application/json',
         };
-        
+
         const methodsWithBody = ['POST', 'PUT', 'PATCH'];
         if (methodsWithBody.includes(req.method)) {
           headers['Content-Type'] = 'application/json';
         }
-        
+
         if (req.headers.authorization) {
           headers['Authorization'] = req.headers.authorization;
         } else if (process.env.CLINREC_API_TOKEN && req.method === 'POST') {
           headers['Authorization'] = `Bearer ${process.env.CLINREC_API_TOKEN}`;
         }
-        
+
         const init = {
           method: req.method,
           headers,
         };
-        
+
         if (methodsWithBody.includes(req.method)) {
           init.body = JSON.stringify(req.body !== undefined ? req.body : {});
         }
-        
+
         const upstream = await fetch(targetUrl, init);
         const text = await upstream.text();
         const contentType = upstream.headers.get('content-type') || '';
-        
+
         res.status(upstream.status);
         if (contentType.includes('application/json')) {
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
