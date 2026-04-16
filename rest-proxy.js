@@ -140,15 +140,15 @@ function createRestProxyApp() {
           users: (response.users || []).map(user => ({
             id: user.id,
             email: user.email,
-            first_name: user.firstName,
-            last_name: user.lastName,
-            is_active: user.isActive,
-            created_at: user.createdAt,
-            last_login_at: user.lastLoginAt
+            first_name: user.first_name,
+            last_name: user.last_name,
+            is_active: user.is_active,
+            created_at: user.created_at,
+            last_login_at: user.last_login_at
           })),
           total: response.total || 0,
           page: response.page || 1,
-          page_size: response.pageSize || 20
+          page_size: response.page_size || 20
         };
         return res.json(result);
       });
