@@ -126,35 +126,31 @@ function createRestProxyApp() {
   app.get('/api/users', async (req, res) => {
     try {
       const client = await getGrpcClient();
-      client.ListUsers({
-        page: parseInt(req.query.page) || 1,
-        page_size: parseInt(req.query.page_size) || 20,
-        specialty: req.query.specialty,
-        is_active: req.query.is_active === 'true',
-      }, (err, response) => {
+      // Убираем лишние параметры, передаем только пустой объект
+      client.ListUsers({}, (err, response) => {
         if (err) {
           console.error('gRPC ListUsers error:', err);
           return res.status(500).json({ error: err.message });
         }
-        // Логируем полный ответ для отладки
-        console.log('Full gRPC response:', JSON.stringify(response, null, 2));
-        console.log('Response keys:', Object.keys(response));
-        console.log('Users array:', response.users);
         
+        console.log('gRPC response users count:', response.users ? response.users.length : 0);
+        
+        // Трансформируем ответ
         const result = {
           users: (response.users || []).map(user => ({
             id: user.id,
             email: user.email,
-            first_name: user.first_name,
-            last_name: user.last_name,
-            is_active: user.is_active,
-            created_at: user.created_at,
-            last_login_at: user.last_login_at
+            first_name: user.first_name || '',
+            last_name: user.last_name || '',
+            is_active: user.is_active === true,
+            created_at: user.created_at || user.createdAt || '',
+            last_login_at: user.last_login_at || user.lastLoginAt || ''
           })),
-          total: response.total || 0,
+          total: response.total || response.users?.length || 0,
           page: response.page || 1,
           page_size: response.page_size || 20
         };
+        
         return res.json(result);
       });
     } catch (error) {
