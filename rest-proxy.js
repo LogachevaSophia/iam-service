@@ -126,16 +126,14 @@ function createRestProxyApp() {
   app.get('/api/users', async (req, res) => {
     try {
       const client = await getGrpcClient();
-      // Убираем лишние параметры, передаем только пустой объект
+      // Передаём пустой объект, без параметров
       client.ListUsers({}, (err, response) => {
         if (err) {
           console.error('gRPC ListUsers error:', err);
           return res.status(500).json({ error: err.message });
         }
         
-        console.log('gRPC response users count:', response.users ? response.users.length : 0);
-        
-        // Трансформируем ответ
+        // Трансформируем ответ в нужный формат
         const result = {
           users: (response.users || []).map(user => ({
             id: user.id,
@@ -143,10 +141,10 @@ function createRestProxyApp() {
             first_name: user.first_name || '',
             last_name: user.last_name || '',
             is_active: user.is_active === true,
-            created_at: user.created_at || user.createdAt || '',
-            last_login_at: user.last_login_at || user.lastLoginAt || ''
+            created_at: user.created_at || '',
+            last_login_at: user.last_login_at || ''
           })),
-          total: response.total || response.users?.length || 0,
+          total: response.total || 0,
           page: response.page || 1,
           page_size: response.page_size || 20
         };
