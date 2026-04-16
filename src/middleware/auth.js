@@ -3,15 +3,16 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 function authMiddleware(req, res, next) {
+  // Используем originalUrl вместо path
+  const requestPath = req.originalUrl || req.url;
+  
   const publicRoutes = [
-    { path: '/api/login', method: 'POST' },
-    { path: '/api/users', method: 'POST' },
-    { path: '/health', method: 'GET' }
+    '/api/login',
+    '/api/users',
+    '/health'
   ];
   
-  const isPublic = publicRoutes.some(
-    route => req.path === route.path && req.method === route.method
-  );
+  const isPublic = publicRoutes.some(route => requestPath.startsWith(route));
   
   if (isPublic) {
     return next();
