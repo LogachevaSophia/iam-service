@@ -794,6 +794,10 @@ export class UserRoleInfo extends jspb.Message {
     clearExpiresAt(): void;
     getExpiresAt(): string | undefined;
     setExpiresAt(value: string): UserRoleInfo;
+    clearPermissionsList(): void;
+    getPermissionsList(): Array<Permission>;
+    setPermissionsList(value: Array<Permission>): UserRoleInfo;
+    addPermissions(value?: Permission, index?: number): Permission;
 
     serializeBinary(): Uint8Array;
     toObject(includeInstance?: boolean): UserRoleInfo.AsObject;
@@ -813,6 +817,7 @@ export namespace UserRoleInfo {
         scopeMap: Array<[string, string]>,
         grantedAt: string,
         expiresAt?: string,
+        permissionsList: Array<Permission.AsObject>,
     }
 }
 

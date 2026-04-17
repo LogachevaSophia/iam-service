@@ -96,14 +96,40 @@ export class RoleService {
       where: { userId, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
       include: { role: { include: { permissions: { include: { permission: true } } } } }
     });
-    return userRoles.map(ur => ({
-      roleId: ur.roleId,
-      roleName: ur.role.name,
-      scope: ur.scope,
-      grantedAt: ur.grantedAt,
-      expiresAt: ur.expiresAt,
-      permissions: ur.role.permissions.map(rp => rp.permission)
-    }));
+    return userRoles.map((ur) => {
+      const scopeMap =
+        ur.scope != null && typeof ur.scope === 'object' && !Array.isArray(ur.scope)
+          ? Object.fromEntries(
+              Object.entries(ur.scope as Record<string, unknown>).map(([k, v]) => [
+                k,
+                v == null ? '' : String(v),
+              ]),
+            )
+          : {};
+      const permissions = ur.role.permissions
+        .map((rp) => {
+          const perm = rp.permission;
+          if (!perm) return null;
+          return {
+            id: perm.id,
+            action: perm.action,
+            resource: perm.resource,
+            conditions:
+              perm.conditions != null ? JSON.stringify(perm.conditions) : '',
+            description: perm.description ?? '',
+            created_at: perm.createdAt ? perm.createdAt.toISOString() : '',
+          };
+        })
+        .filter(Boolean);
+      return {
+        role_id: ur.roleId,
+        role_name: ur.role.name,
+        scope: scopeMap,
+        granted_at: ur.grantedAt ? ur.grantedAt.toISOString() : '',
+        expires_at: ur.expiresAt ? ur.expiresAt.toISOString() : undefined,
+        permissions,
+      };
+    });
   }
 }
 

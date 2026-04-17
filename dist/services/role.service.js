@@ -3,6 +3,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.roleService = exports.RoleService = void 0;
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
+/** Prisma возвращает permissions как RolePermission[]; для API нужен массив Permission. */
+function flattenRolePermissions(role) {
+    const raw = role.permissions;
+    if (!Array.isArray(raw))
+        return role;
+    const permissions = raw
+        .map((rp) => (rp && typeof rp === 'object' && rp.permission ? rp.permission : null))
+        .filter(Boolean);
+    return { ...role, permissions };
+}
 class RoleService {
     async createRole(data) {
         const role = await prisma.role.create({
@@ -15,7 +25,7 @@ class RoleService {
             },
             include: { permissions: { include: { permission: true } } }
         });
-        return role;
+        return flattenRolePermissions(role);
     }
     async getRole(id) {
         const role = await prisma.role.findUnique({
@@ -24,7 +34,7 @@ class RoleService {
         });
         if (!role)
             throw new Error('Role not found');
-        return role;
+        return flattenRolePermissions(role);
     }
     async updateRole(id, data) {
         const role = await prisma.role.update({
@@ -39,7 +49,7 @@ class RoleService {
             },
             include: { permissions: { include: { permission: true } } }
         });
-        return role;
+        return flattenRolePermissions(role);
     }
     async deleteRole(id) {
         await prisma.role.delete({ where: { id } });
@@ -56,7 +66,12 @@ class RoleService {
             }),
             prisma.role.count({ where })
         ]);
-        return { roles, total, page, pageSize };
+        return {
+            roles: roles.map((r) => flattenRolePermissions(r)),
+            total,
+            page,
+            pageSize,
+        };
     }
     async assignRole(data) {
         const expiresAt = data.expiresInDays ? new Date(Date.now() + data.expiresInDays * 86400000) : undefined;
@@ -76,14 +91,37 @@ class RoleService {
             where: { userId, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
             include: { role: { include: { permissions: { include: { permission: true } } } } }
         });
-        return userRoles.map(ur => ({
-            roleId: ur.roleId,
-            roleName: ur.role.name,
-            scope: ur.scope,
-            grantedAt: ur.grantedAt,
-            expiresAt: ur.expiresAt,
-            permissions: ur.role.permissions.map(rp => rp.permission)
-        }));
+        return userRoles.map((ur) => {
+            const scopeMap = ur.scope != null && typeof ur.scope === 'object' && !Array.isArray(ur.scope)
+                ? Object.fromEntries(Object.entries(ur.scope).map(([k, v]) => [
+                    k,
+                    v == null ? '' : String(v),
+                ]))
+                : {};
+            const permissions = ur.role.permissions
+                .map((rp) => {
+                const perm = rp.permission;
+                if (!perm)
+                    return null;
+                return {
+                    id: perm.id,
+                    action: perm.action,
+                    resource: perm.resource,
+                    conditions: perm.conditions != null ? JSON.stringify(perm.conditions) : '',
+                    description: perm.description ?? '',
+                    created_at: perm.createdAt ? perm.createdAt.toISOString() : '',
+                };
+            })
+                .filter(Boolean);
+            return {
+                role_id: ur.roleId,
+                role_name: ur.role.name,
+                scope: scopeMap,
+                granted_at: ur.grantedAt ? ur.grantedAt.toISOString() : '',
+                expires_at: ur.expiresAt ? ur.expiresAt.toISOString() : undefined,
+                permissions,
+            };
+        });
     }
 }
 exports.RoleService = RoleService;

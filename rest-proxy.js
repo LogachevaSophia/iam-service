@@ -421,34 +421,40 @@ function createRestProxyApp() {
         }
         const merged = [];
         const seen = new Set();
-        let remaining = roles.length;
-        let responded = false;
-        const finish = () => {
-          remaining -= 1;
-          if (remaining === 0 && !responded) {
-            responded = true;
-            return res.json({ permissions: merged });
+        const addPerms = (perms) => {
+          for (const p of perms) {
+            const action = p.action != null ? String(p.action) : '';
+            const resource = p.resource != null ? String(p.resource) : '';
+            const key = `${action}|${resource}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              merged.push({ action, resource });
+            }
           }
         };
+        let pending = 0;
         for (const r of roles) {
-          const roleId = r.role_id;
-          client.GetRole({ id: roleId }, (e2, roleResp) => {
-            if (e2) {
-              console.error('GetRole error for permissions aggregate:', e2);
-            } else if (roleResp && roleResp.permissions) {
-              for (const p of roleResp.permissions) {
-                const action = p.action;
-                const resource = p.resource;
-                if (!action || !resource) continue;
-                const key = `${action}|${resource}`;
-                if (!seen.has(key)) {
-                  seen.add(key);
-                  merged.push({ action, resource });
-                }
+          const inline = r.permissions || [];
+          if (inline.length > 0) {
+            addPerms(inline);
+          } else {
+            pending += 1;
+            const roleId = r.role_id;
+            client.GetRole({ id: roleId }, (e2, roleResp) => {
+              if (e2) {
+                console.error('GetRole error for permissions aggregate:', e2);
+              } else if (roleResp && roleResp.permissions) {
+                addPerms(roleResp.permissions);
               }
-            }
-            finish();
-          });
+              pending -= 1;
+              if (pending === 0) {
+                return res.json({ permissions: merged });
+              }
+            });
+          }
+        }
+        if (pending === 0) {
+          return res.json({ permissions: merged });
         }
       });
     } catch (error) {

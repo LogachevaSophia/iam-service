@@ -616,7 +616,7 @@ if (goog.DEBUG && !COMPILED) {
  * @constructor
  */
 proto.iam.UserRoleInfo = function(opt_data) {
-  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.iam.UserRoleInfo.repeatedFields_, null);
 };
 goog.inherits(proto.iam.UserRoleInfo, jspb.Message);
 if (goog.DEBUG && !COMPILED) {
@@ -6557,6 +6557,13 @@ proto.iam.GetUserRolesResponse.prototype.clearRolesList = function() {
 
 
 
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.iam.UserRoleInfo.repeatedFields_ = [6];
+
 
 
 if (jspb.Message.GENERATE_TO_OBJECT) {
@@ -6592,7 +6599,9 @@ proto.iam.UserRoleInfo.toObject = function(includeInstance, msg) {
     roleName: jspb.Message.getFieldWithDefault(msg, 2, ""),
     scopeMap: (f = msg.getScopeMap()) ? f.toObject(includeInstance, undefined) : [],
     grantedAt: jspb.Message.getFieldWithDefault(msg, 4, ""),
-    expiresAt: jspb.Message.getFieldWithDefault(msg, 5, "")
+    expiresAt: jspb.Message.getFieldWithDefault(msg, 5, ""),
+    permissionsList: jspb.Message.toObjectList(msg.getPermissionsList(),
+    proto.iam.Permission.toObject, includeInstance)
   };
 
   if (includeInstance) {
@@ -6650,6 +6659,11 @@ proto.iam.UserRoleInfo.deserializeBinaryFromReader = function(msg, reader) {
     case 5:
       var value = /** @type {string} */ (reader.readString());
       msg.setExpiresAt(value);
+      break;
+    case 6:
+      var value = new proto.iam.Permission;
+      reader.readMessage(value,proto.iam.Permission.deserializeBinaryFromReader);
+      msg.addPermissions(value);
       break;
     default:
       reader.skipField();
@@ -6710,6 +6724,14 @@ proto.iam.UserRoleInfo.serializeBinaryToWriter = function(message, writer) {
     writer.writeString(
       5,
       f
+    );
+  }
+  f = message.getPermissionsList();
+  if (f.length > 0) {
+    writer.writeRepeatedMessage(
+      6,
+      f,
+      proto.iam.Permission.serializeBinaryToWriter
     );
   }
 };
@@ -6824,6 +6846,44 @@ proto.iam.UserRoleInfo.prototype.clearExpiresAt = function() {
  */
 proto.iam.UserRoleInfo.prototype.hasExpiresAt = function() {
   return jspb.Message.getField(this, 5) != null;
+};
+
+
+/**
+ * repeated Permission permissions = 6;
+ * @return {!Array<!proto.iam.Permission>}
+ */
+proto.iam.UserRoleInfo.prototype.getPermissionsList = function() {
+  return /** @type{!Array<!proto.iam.Permission>} */ (
+    jspb.Message.getRepeatedWrapperField(this, proto.iam.Permission, 6));
+};
+
+
+/**
+ * @param {!Array<!proto.iam.Permission>} value
+ * @return {!proto.iam.UserRoleInfo} returns this
+*/
+proto.iam.UserRoleInfo.prototype.setPermissionsList = function(value) {
+  return jspb.Message.setRepeatedWrapperField(this, 6, value);
+};
+
+
+/**
+ * @param {!proto.iam.Permission=} opt_value
+ * @param {number=} opt_index
+ * @return {!proto.iam.Permission}
+ */
+proto.iam.UserRoleInfo.prototype.addPermissions = function(opt_value, opt_index) {
+  return jspb.Message.addToRepeatedWrapperField(this, 6, opt_value, proto.iam.Permission, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.iam.UserRoleInfo} returns this
+ */
+proto.iam.UserRoleInfo.prototype.clearPermissionsList = function() {
+  return this.setPermissionsList([]);
 };
 
 

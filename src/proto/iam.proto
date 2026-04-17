@@ -211,6 +211,8 @@ message UserRoleInfo {
   map<string, string> scope = 3;
   string granted_at = 4;
   optional string expires_at = 5;
+  /** Права роли (для REST /users/:id/permissions без N+1 GetRole). */
+  repeated Permission permissions = 6;
 }
 
 // Permission management

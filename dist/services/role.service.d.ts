@@ -129,19 +129,21 @@ export declare class RoleService {
         success: boolean;
     }>;
     getUserRoles(userId: string): Promise<{
-        roleId: string;
-        roleName: string;
-        scope: import("@prisma/client/runtime/library").JsonValue;
-        grantedAt: Date;
-        expiresAt: Date | null;
-        permissions: {
+        role_id: string;
+        role_name: string;
+        scope: {
+            [k: string]: string;
+        };
+        granted_at: string;
+        expires_at: string | undefined;
+        permissions: ({
             id: string;
             action: string;
             resource: string;
-            conditions: import("@prisma/client/runtime/library").JsonValue | null;
-            description: string | null;
-            createdAt: Date;
-        }[];
+            conditions: string;
+            description: string;
+            created_at: string;
+        } | null)[];
     }[]>;
 }
 export declare const roleService: RoleService;
