@@ -2,6 +2,16 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+/** Prisma возвращает permissions как RolePermission[]; для API нужен массив Permission. */
+function flattenRolePermissions<T extends { permissions?: unknown }>(role: T): T {
+  const raw = role.permissions;
+  if (!Array.isArray(raw)) return role;
+  const permissions = raw
+    .map((rp: any) => (rp && typeof rp === 'object' && rp.permission ? rp.permission : null))
+    .filter(Boolean);
+  return { ...role, permissions } as T;
+}
+
 export class RoleService {
   async createRole(data: { name: string; description?: string; permissionIds?: string[] }) {
     const role = await prisma.role.create({
@@ -14,7 +24,7 @@ export class RoleService {
       },
       include: { permissions: { include: { permission: true } } }
     });
-    return role;
+    return flattenRolePermissions(role);
   }
 
   async getRole(id: string) {
@@ -23,7 +33,7 @@ export class RoleService {
       include: { permissions: { include: { permission: true } } }
     });
     if (!role) throw new Error('Role not found');
-    return role;
+    return flattenRolePermissions(role);
   }
 
   async updateRole(id: string, data: { name?: string; description?: string; permissionIds?: string[] }) {
@@ -39,7 +49,7 @@ export class RoleService {
       },
       include: { permissions: { include: { permission: true } } }
     });
-    return role;
+    return flattenRolePermissions(role);
   }
 
   async deleteRole(id: string) {
@@ -58,7 +68,12 @@ export class RoleService {
       }),
       prisma.role.count({ where })
     ]);
-    return { roles, total, page, pageSize };
+    return {
+      roles: roles.map((r) => flattenRolePermissions(r)),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async assignRole(data: { userId: string; roleId: string; scope?: any; expiresInDays?: number; grantedBy: string }) {

@@ -39,6 +39,50 @@ async function getGrpcClient() {
   return grpcClient;
 }
 
+function checkPermissionAllowed(client, userId, action, resource) {
+  return new Promise((resolve, reject) => {
+    client.CheckPermission(
+      { user_id: userId, action, resource },
+      (err, response) => {
+        if (err) return reject(err);
+        resolve(Boolean(response && response.allowed));
+      }
+    );
+  });
+}
+
+/** Создание/список/удаление пользователей и назначение ролей — только manage + user. */
+async function assertManageUser(client, req, res) {
+  if (!req.userId) {
+    res.status(401).json({ error: 'Unauthorized: No token provided' });
+    return false;
+  }
+  try {
+    const ok = await checkPermissionAllowed(client, req.userId, 'manage', 'user');
+    if (!ok) {
+      res.status(403).json({
+        error: 'Forbidden: требуется право manage на ресурс user',
+      });
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('CheckPermission (manage user):', e);
+    res.status(500).json({ error: e.message || 'Permission check failed' });
+    return false;
+  }
+}
+
+/** Просмотр чужого профиля / ролей / прав — только сам пользователь или manage + user. */
+async function assertSelfOrManageUser(client, req, res, targetUserId) {
+  if (!req.userId) {
+    res.status(401).json({ error: 'Unauthorized: No token provided' });
+    return false;
+  }
+  if (req.userId === targetUserId) return true;
+  return assertManageUser(client, req, res);
+}
+
 function createRestProxyApp() {
   const app = express();
   app.use(cors());
@@ -115,6 +159,7 @@ function createRestProxyApp() {
   app.get('/api/user/:id', async (req, res) => {
     try {
       const client = await getGrpcClient();
+      if (!(await assertSelfOrManageUser(client, req, res, req.params.id))) return;
       client.GetUser({ id: req.params.id }, (err, response) => {
         if (err) {
           return res.status(404).json({ error: err.message });
@@ -129,6 +174,7 @@ function createRestProxyApp() {
   app.get('/api/users', async (req, res) => {
     try {
       const client = await getGrpcClient();
+      if (!(await assertManageUser(client, req, res))) return;
       // Передаём пустой объект, без параметров
       client.ListUsers({}, (err, response) => {
         if (err) {
@@ -163,6 +209,7 @@ function createRestProxyApp() {
   app.post('/api/users', async (req, res) => {
     try {
       const client = await getGrpcClient();
+      if (!(await assertManageUser(client, req, res))) return;
       client.CreateUser(req.body, (err, response) => {
         if (err) {
           return res.status(409).json({ error: err.message });
@@ -177,6 +224,7 @@ function createRestProxyApp() {
   app.put('/api/user/:id', async (req, res) => {
     try {
       const client = await getGrpcClient();
+      if (!(await assertSelfOrManageUser(client, req, res, req.params.id))) return;
       client.UpdateUser({ id: req.params.id, ...req.body }, (err, response) => {
         if (err) {
           return res.status(404).json({ error: err.message });
@@ -191,6 +239,7 @@ function createRestProxyApp() {
   app.delete('/api/user/:id', async (req, res) => {
     try {
       const client = await getGrpcClient();
+      if (!(await assertManageUser(client, req, res))) return;
       client.DeleteUser({ id: req.params.id }, (err, response) => {
         if (err) {
           return res.status(404).json({ error: err.message });
@@ -314,6 +363,7 @@ function createRestProxyApp() {
   app.post('/api/users/assign-role', async (req, res) => {
     try {
       const client = await getGrpcClient();
+      if (!(await assertManageUser(client, req, res))) return;
       client.AssignRole(req.body, (err, response) => {
         if (err) {
           return res.status(404).json({ error: err.message });
@@ -328,6 +378,7 @@ function createRestProxyApp() {
   app.post('/api/users/:userId/revoke-role/:roleId', async (req, res) => {
     try {
       const client = await getGrpcClient();
+      if (!(await assertManageUser(client, req, res))) return;
       client.RevokeRole({ user_id: req.params.userId, role_id: req.params.roleId }, (err, response) => {
         if (err) {
           return res.status(404).json({ error: err.message });
@@ -342,6 +393,7 @@ function createRestProxyApp() {
   app.get('/api/users/:userId/roles', async (req, res) => {
     try {
       const client = await getGrpcClient();
+      if (!(await assertSelfOrManageUser(client, req, res, req.params.userId))) return;
       client.GetUserRoles({ user_id: req.params.userId }, (err, response) => {
         if (err) {
           return res.status(404).json({ error: err.message });
@@ -358,6 +410,7 @@ function createRestProxyApp() {
     try {
       const client = await getGrpcClient();
       const userId = req.params.userId;
+      if (!(await assertSelfOrManageUser(client, req, res, userId))) return;
       client.GetUserRoles({ user_id: userId }, (err, response) => {
         if (err) {
           return res.status(404).json({ error: err.message });

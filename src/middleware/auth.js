@@ -3,17 +3,14 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 function authMiddleware(req, res, next) {
-  // Используем originalUrl вместо path
-  const requestPath = req.originalUrl || req.url;
-  
-  const publicRoutes = [
-    '/api/login',
-    '/api/users',
-    '/health'
-  ];
-  
-  const isPublic = publicRoutes.some(route => requestPath.startsWith(route));
-  
+  const requestPath = (req.originalUrl || req.url || '').split('?')[0];
+
+  // Только вход без токена. Раньше здесь был префикс /api/users — из‑за него
+  // POST/GET /api/users и все /api/users/... шли без JWT (создание пользователя было доступно всем).
+  const isPublic =
+    requestPath === '/api/login' ||
+    requestPath.startsWith('/api/login/');
+
   if (isPublic) {
     return next();
   }

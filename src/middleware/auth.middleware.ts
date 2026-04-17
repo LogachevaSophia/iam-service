@@ -9,11 +9,7 @@ export interface AuthRequest extends Request {
 
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   // Публичные маршруты (не требуют токена)
-  const publicRoutes = [
-    { path: '/api/login', method: 'POST' },
-    { path: '/api/users', method: 'POST' },  // регистрация
-    { path: '/health', method: 'GET' }
-  ];
+  const publicRoutes = [{ path: '/api/login', method: 'POST' }];
   
   const isPublic = publicRoutes.some(
     route => req.path === route.path && req.method === route.method
