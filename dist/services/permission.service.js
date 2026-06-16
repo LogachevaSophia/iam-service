@@ -16,6 +16,12 @@ class PermissionService {
         try {
             const userPermissions = await this.getUserPermissionsWithRoles(userId);
             if (!userPermissions || userPermissions.length === 0) {
+                logger_1.default.debug('checkPermission_no_user_permissions', {
+                    userId,
+                    action,
+                    resource,
+                    hint: 'Нет прав у пользователя (роли не назначены или кэш пуст). LOG_LEVEL=debug',
+                });
                 await this.logAudit(userId, action, resource, resourceId, metadata, false, 'No permissions found', startTime);
                 return {
                     allowed: false,
@@ -24,6 +30,12 @@ class PermissionService {
             }
             const applicablePermissions = userPermissions.filter(p => p.action === action && p.resource === resource);
             if (applicablePermissions.length === 0) {
+                logger_1.default.debug('checkPermission_no_matching_pair', {
+                    userId,
+                    action,
+                    resource,
+                    distinctPairs: [...new Set(userPermissions.map((p) => `${p.action}:${p.resource}`))].slice(0, 30),
+                });
                 await this.logAudit(userId, action, resource, resourceId, metadata, false, 'No applicable permissions', startTime);
                 return {
                     allowed: false,

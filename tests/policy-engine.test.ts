@@ -103,4 +103,31 @@ describe('PolicyEngine', () => {
     );
     expect(allowed.allowed).toBe(true);
   });
+
+  it('enforces departmentMatch via roleScope', async () => {
+    const denied = await engine.evaluate(
+      [perm({ conditions: { departmentMatch: true }, roleScope: { departments: ['ICU'] } })],
+      { userId: 'u1', action: 'read', resource: 'guideline' },
+      { department: 'CARDIO' },
+    );
+    expect(denied.allowed).toBe(false);
+
+    const allowed = await engine.evaluate(
+      [perm({ conditions: { departmentMatch: true }, roleScope: { departments: ['ICU'] } })],
+      { userId: 'u1', action: 'read', resource: 'guideline' },
+      { department: 'ICU' },
+    );
+    expect(allowed.allowed).toBe(true);
+  });
+
+  it('extracts constraints from allowed permission', async () => {
+    const r = await engine.evaluate(
+      [perm({ conditions: { ownerOnly: true, allowedStatuses: ['PUBLISHED'] } })],
+      { userId: 'u1', action: 'read', resource: 'guideline', resourceId: 'x' },
+      { ownerId: 'u1', status: 'PUBLISHED' },
+    );
+    expect(r.allowed).toBe(true);
+    expect(r.constraints).toContain('owner_only: true');
+    expect(r.constraints?.some((c) => c.includes('PUBLISHED'))).toBe(true);
+  });
 });

@@ -4,105 +4,73 @@ export declare class RoleService {
         description?: string;
         permissionIds?: string[];
     }): Promise<{
-        permissions: ({
-            permission: {
-                id: string;
-                action: string;
-                resource: string;
-                conditions: import("@prisma/client/runtime/library").JsonValue | null;
-                description: string | null;
-                createdAt: Date;
-            };
-        } & {
-            id: string;
-            roleId: string;
-            permissionId: string;
-        })[];
-    } & {
-        name: string;
         id: string;
-        description: string | null;
-        createdAt: Date;
-        isSystem: boolean;
-        updatedAt: Date;
+        name: string;
+        description: string;
+        is_system: boolean;
+        created_at: string;
+        permissions: {
+            id: string;
+            action: string;
+            resource: string;
+            conditions: string;
+            description: string;
+            created_at: string;
+        }[];
     }>;
     getRole(id: string): Promise<{
-        permissions: ({
-            permission: {
-                id: string;
-                action: string;
-                resource: string;
-                conditions: import("@prisma/client/runtime/library").JsonValue | null;
-                description: string | null;
-                createdAt: Date;
-            };
-        } & {
-            id: string;
-            roleId: string;
-            permissionId: string;
-        })[];
-    } & {
-        name: string;
         id: string;
-        description: string | null;
-        createdAt: Date;
-        isSystem: boolean;
-        updatedAt: Date;
+        name: string;
+        description: string;
+        is_system: boolean;
+        created_at: string;
+        permissions: {
+            id: string;
+            action: string;
+            resource: string;
+            conditions: string;
+            description: string;
+            created_at: string;
+        }[];
     }>;
     updateRole(id: string, data: {
         name?: string;
         description?: string;
         permissionIds?: string[];
     }): Promise<{
-        permissions: ({
-            permission: {
-                id: string;
-                action: string;
-                resource: string;
-                conditions: import("@prisma/client/runtime/library").JsonValue | null;
-                description: string | null;
-                createdAt: Date;
-            };
-        } & {
-            id: string;
-            roleId: string;
-            permissionId: string;
-        })[];
-    } & {
-        name: string;
         id: string;
-        description: string | null;
-        createdAt: Date;
-        isSystem: boolean;
-        updatedAt: Date;
+        name: string;
+        description: string;
+        is_system: boolean;
+        created_at: string;
+        permissions: {
+            id: string;
+            action: string;
+            resource: string;
+            conditions: string;
+            description: string;
+            created_at: string;
+        }[];
     }>;
     deleteRole(id: string): Promise<{
         success: boolean;
     }>;
     listRoles(page?: number, pageSize?: number, includeSystem?: boolean): Promise<{
-        roles: ({
-            permissions: ({
-                permission: {
-                    id: string;
-                    action: string;
-                    resource: string;
-                    conditions: import("@prisma/client/runtime/library").JsonValue | null;
-                    description: string | null;
-                    createdAt: Date;
-                };
-            } & {
-                id: string;
-                roleId: string;
-                permissionId: string;
-            })[];
-        } & {
-            name: string;
+        roles: {
             id: string;
-            description: string | null;
-            createdAt: Date;
-            isSystem: boolean;
-            updatedAt: Date;
-        })[];
+            name: string;
+            description: string;
+            is_system: boolean;
+            created_at: string;
+            permissions: {
+                id: string;
+                action: string;
+                resource: string;
+                conditions: string;
+                description: string;
+                created_at: string;
+            }[];
+        }[];
         total: number;
         page: number;
         pageSize: number;
@@ -136,14 +104,14 @@ export declare class RoleService {
         };
         granted_at: string;
         expires_at: string | undefined;
-        permissions: ({
+        permissions: {
             id: string;
             action: string;
             resource: string;
             conditions: string;
             description: string;
             created_at: string;
-        } | null)[];
+        }[];
     }[]>;
 }
 export declare const roleService: RoleService;

@@ -1,17 +1,42 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.roleService = exports.RoleService = void 0;
 const client_1 = require("@prisma/client");
+const logger_1 = __importDefault(require("../utils/logger"));
 const prisma = new client_1.PrismaClient();
-/** Prisma возвращает permissions как RolePermission[]; для API нужен массив Permission. */
-function flattenRolePermissions(role) {
+/** Prisma Json → строка для proto `Permission.conditions` (иначе в gRPC получается "[object Object]"). */
+function permissionRowToGrpc(perm) {
+    return {
+        id: perm.id,
+        action: perm.action,
+        resource: perm.resource,
+        conditions: perm.conditions != null ? JSON.stringify(perm.conditions) : '',
+        description: perm.description ?? '',
+        created_at: perm.createdAt ? perm.createdAt.toISOString() : '',
+    };
+}
+function rolePermissionsToGrpc(role) {
     const raw = role.permissions;
     if (!Array.isArray(raw))
-        return role;
-    const permissions = raw
+        return [];
+    return raw
         .map((rp) => (rp && typeof rp === 'object' && rp.permission ? rp.permission : null))
-        .filter(Boolean);
-    return { ...role, permissions };
+        .filter(Boolean)
+        .map((perm) => permissionRowToGrpc(perm));
+}
+/** Ответ роли в виде, ожидаемом `RoleResponse` в proto (snake_case + строковые conditions). */
+function roleToGrpcResponse(role) {
+    return {
+        id: role.id,
+        name: role.name,
+        description: role.description ?? '',
+        is_system: role.isSystem === true,
+        created_at: role.createdAt ? role.createdAt.toISOString() : '',
+        permissions: rolePermissionsToGrpc(role),
+    };
 }
 class RoleService {
     async createRole(data) {
@@ -25,16 +50,20 @@ class RoleService {
             },
             include: { permissions: { include: { permission: true } } }
         });
-        return flattenRolePermissions(role);
+        return roleToGrpcResponse(role);
     }
     async getRole(id) {
         const role = await prisma.role.findUnique({
             where: { id },
             include: { permissions: { include: { permission: true } } }
         });
-        if (!role)
+        if (!role) {
+            logger_1.default.warn('getRole_not_found', { roleId: id });
             throw new Error('Role not found');
-        return flattenRolePermissions(role);
+        }
+        const permCount = rolePermissionsToGrpc(role).length;
+        logger_1.default.info('getRole_ok', { roleId: id, name: role.name, permissionCount: permCount });
+        return roleToGrpcResponse(role);
     }
     async updateRole(id, data) {
         const role = await prisma.role.update({
@@ -49,7 +78,7 @@ class RoleService {
             },
             include: { permissions: { include: { permission: true } } }
         });
-        return flattenRolePermissions(role);
+        return roleToGrpcResponse(role);
     }
     async deleteRole(id) {
         await prisma.role.delete({ where: { id } });
@@ -67,7 +96,7 @@ class RoleService {
             prisma.role.count({ where })
         ]);
         return {
-            roles: roles.map((r) => flattenRolePermissions(r)),
+            roles: roles.map((r) => roleToGrpcResponse(r)),
             total,
             page,
             pageSize,
@@ -87,32 +116,25 @@ class RoleService {
         return { success: true };
     }
     async getUserRoles(userId) {
+        logger_1.default.info('getUserRoles_start', { userId });
         const userRoles = await prisma.userRole.findMany({
             where: { userId, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
             include: { role: { include: { permissions: { include: { permission: true } } } } }
         });
-        return userRoles.map((ur) => {
+        logger_1.default.info('getUserRoles_db', {
+            userId,
+            assignmentCount: userRoles.length,
+            roleIds: userRoles.map((ur) => ur.roleId),
+            roleNames: userRoles.map((ur) => ur.role?.name).filter(Boolean),
+        });
+        const mapped = userRoles.map((ur) => {
             const scopeMap = ur.scope != null && typeof ur.scope === 'object' && !Array.isArray(ur.scope)
                 ? Object.fromEntries(Object.entries(ur.scope).map(([k, v]) => [
                     k,
                     v == null ? '' : String(v),
                 ]))
                 : {};
-            const permissions = ur.role.permissions
-                .map((rp) => {
-                const perm = rp.permission;
-                if (!perm)
-                    return null;
-                return {
-                    id: perm.id,
-                    action: perm.action,
-                    resource: perm.resource,
-                    conditions: perm.conditions != null ? JSON.stringify(perm.conditions) : '',
-                    description: perm.description ?? '',
-                    created_at: perm.createdAt ? perm.createdAt.toISOString() : '',
-                };
-            })
-                .filter(Boolean);
+            const permissions = rolePermissionsToGrpc(ur.role);
             return {
                 role_id: ur.roleId,
                 role_name: ur.role.name,
@@ -122,6 +144,15 @@ class RoleService {
                 permissions,
             };
         });
+        logger_1.default.info('getUserRoles_mapped', {
+            userId,
+            rolesReturned: mapped.length,
+            permissionsPerRole: mapped.map((r) => ({
+                roleId: r.role_id,
+                count: r.permissions.length,
+            })),
+        });
+        return mapped;
     }
 }
 exports.RoleService = RoleService;

@@ -13,5 +13,6 @@ module.exports = {
     '!src/server.ts',
   ],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
+  coverageReporters: ['text', 'html', 'json-summary'],
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 };

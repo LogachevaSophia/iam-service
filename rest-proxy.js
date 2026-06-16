@@ -39,6 +39,30 @@ async function getGrpcClient() {
   return grpcClient;
 }
 
+/** У @grpc/proto-loader повторяемые поля иногда как `roles`, иногда как `rolesList`. */
+function grpcRepeated(obj, ...keys) {
+  if (obj == null) return [];
+  for (const k of keys) {
+    const v = obj[k];
+    if (Array.isArray(v)) return v;
+  }
+  return [];
+}
+
+/** JSON в stdout (Docker / PM2). Подробности: `REST_PROXY_DEBUG=1`. */
+function restProxyLog(event, meta = {}) {
+  const payload = {
+    service: 'rest-proxy',
+    event,
+    ...meta,
+    ts: new Date().toISOString(),
+  };
+  console.log(JSON.stringify(payload));
+}
+
+const REST_PROXY_DEBUG =
+  process.env.REST_PROXY_DEBUG === '1' || process.env.REST_PROXY_DEBUG === 'true';
+
 function checkPermissionAllowed(client, userId, action, resource) {
   return new Promise((resolve, reject) => {
     client.CheckPermission(
@@ -393,10 +417,33 @@ function createRestProxyApp() {
   app.get('/api/users/:userId/roles', async (req, res) => {
     try {
       const client = await getGrpcClient();
-      if (!(await assertSelfOrManageUser(client, req, res, req.params.userId))) return;
-      client.GetUserRoles({ user_id: req.params.userId }, (err, response) => {
+      const targetUserId = req.params.userId;
+      if (!(await assertSelfOrManageUser(client, req, res, targetUserId))) return;
+      client.GetUserRoles({ user_id: targetUserId }, (err, response) => {
         if (err) {
+          restProxyLog('get_user_roles_grpc_error', {
+            targetUserId,
+            requesterId: req.userId,
+            error: err.message,
+          });
           return res.status(404).json({ error: err.message });
+        }
+        const roles = grpcRepeated(response, 'roles', 'rolesList');
+        restProxyLog('get_user_roles_ok', {
+          targetUserId,
+          requesterId: req.userId,
+          rolesCount: roles.length,
+          roleIds: roles.map((r) => r.role_id || r.roleId).filter(Boolean),
+          responseTopKeys: response && typeof response === 'object' ? Object.keys(response) : [],
+        });
+        if (REST_PROXY_DEBUG) {
+          restProxyLog('get_user_roles_debug', {
+            targetUserId,
+            sampleFirstRoleKeys: roles[0] && typeof roles[0] === 'object' ? Object.keys(roles[0]) : [],
+            firstRoleInlinePermsCount: roles[0]
+              ? grpcRepeated(roles[0], 'permissions', 'permissionsList').length
+              : 0,
+          });
         }
         return res.json(response);
       });
@@ -413,16 +460,39 @@ function createRestProxyApp() {
       if (!(await assertSelfOrManageUser(client, req, res, userId))) return;
       client.GetUserRoles({ user_id: userId }, (err, response) => {
         if (err) {
+          restProxyLog('aggregate_permissions_get_user_roles_error', {
+            targetUserId: userId,
+            requesterId: req.userId,
+            error: err.message,
+          });
           return res.status(404).json({ error: err.message });
         }
-        const roles = response.roles || [];
+        const roles = grpcRepeated(response, 'roles', 'rolesList');
+        if (REST_PROXY_DEBUG) {
+          restProxyLog('aggregate_permissions_grpc_raw', {
+            targetUserId: userId,
+            requesterId: req.userId,
+            responseTopKeys: response && typeof response === 'object' ? Object.keys(response) : [],
+            rolesLenFromRepeated: roles.length,
+          });
+        }
         if (roles.length === 0) {
+          restProxyLog('aggregate_permissions_empty_roles', {
+            targetUserId: userId,
+            requesterId: req.userId,
+            hint: 'У пользователя нет назначенных ролей (UserRole) или срок role истёк',
+          });
           return res.json({ permissions: [] });
         }
         const merged = [];
         const seen = new Set();
+        const perRoleTrace = [];
         const addPerms = (perms) => {
-          for (const p of perms) {
+          for (const raw of perms) {
+            const p =
+              raw && raw.permission && typeof raw.permission === 'object'
+                ? raw.permission
+                : raw;
             const action = p.action != null ? String(p.action) : '';
             const resource = p.resource != null ? String(p.resource) : '';
             const key = `${action}|${resource}`;
@@ -434,26 +504,82 @@ function createRestProxyApp() {
         };
         let pending = 0;
         for (const r of roles) {
-          const inline = r.permissions || [];
+          const inline = grpcRepeated(r, 'permissions', 'permissionsList');
+          const roleId = r.role_id != null && r.role_id !== '' ? r.role_id : r.roleId;
+          const roleName = r.role_name || r.roleName || '';
           if (inline.length > 0) {
             addPerms(inline);
-          } else {
-            pending += 1;
-            const roleId = r.role_id;
-            client.GetRole({ id: roleId }, (e2, roleResp) => {
-              if (e2) {
-                console.error('GetRole error for permissions aggregate:', e2);
-              } else if (roleResp && roleResp.permissions) {
-                addPerms(roleResp.permissions);
-              }
-              pending -= 1;
-              if (pending === 0) {
-                return res.json({ permissions: merged });
-              }
+            perRoleTrace.push({
+              roleId: roleId || null,
+              roleName: roleName || null,
+              source: 'inline',
+              inlineCount: inline.length,
+              mergedAfter: merged.length,
             });
+            continue;
           }
+          if (!roleId) {
+            perRoleTrace.push({
+              roleId: null,
+              roleName: roleName || null,
+              source: 'skip_no_role_id',
+              inlineCount: 0,
+            });
+            restProxyLog('aggregate_permissions_missing_role_id', {
+              targetUserId: userId,
+              requesterId: req.userId,
+              roleKeys: r && typeof r === 'object' ? Object.keys(r) : [],
+            });
+            continue;
+          }
+          pending += 1;
+          perRoleTrace.push({
+            roleId,
+            roleName: roleName || null,
+            source: 'get_role_fallback',
+            inlineCount: 0,
+          });
+          client.GetRole({ id: roleId }, (e2, roleResp) => {
+            if (e2) {
+              restProxyLog('aggregate_permissions_get_role_error', {
+                targetUserId: userId,
+                requesterId: req.userId,
+                roleId,
+                error: e2.message,
+              });
+            } else if (roleResp) {
+              const fromRole = grpcRepeated(roleResp, 'permissions', 'permissionsList');
+              addPerms(fromRole);
+              if (REST_PROXY_DEBUG) {
+                restProxyLog('aggregate_permissions_get_role_ok', {
+                  targetUserId: userId,
+                  roleId,
+                  permCount: fromRole.length,
+                  mergedAfter: merged.length,
+                });
+              }
+            }
+            pending -= 1;
+            if (pending === 0) {
+              restProxyLog('aggregate_permissions_done', {
+                targetUserId: userId,
+                requesterId: req.userId,
+                rolesCount: roles.length,
+                mergedCount: merged.length,
+                perRoleTrace,
+              });
+              return res.json({ permissions: merged });
+            }
+          });
         }
         if (pending === 0) {
+          restProxyLog('aggregate_permissions_done', {
+            targetUserId: userId,
+            requesterId: req.userId,
+            rolesCount: roles.length,
+            mergedCount: merged.length,
+            perRoleTrace,
+          });
           return res.json({ permissions: merged });
         }
       });
@@ -530,6 +656,9 @@ if (require.main === module) {
     const base = `http://localhost:${REST_PROXY_PORT}`;
     console.log(`🚀 REST Proxy running on ${base}`);
     console.log(`🔗 Clinrec API proxied to ${CLINREC_BASE}`);
+    console.log(
+      `📝 IAM trace: JSON logs on stdout (aggregate_permissions_*, get_user_roles_*). Verbose: REST_PROXY_DEBUG=1`,
+    );
     console.log('\n📋 IAM Routes:');
     console.log(`   POST   ${base}/api/login`);
     console.log(`   POST   ${base}/api/logout`);
